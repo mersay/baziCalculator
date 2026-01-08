@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BaZi Calculator</title>
+<style>
+  body { font-family: sans-serif; padding: 2em; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+  th, td { border: 1px solid #ccc; padding: 0.5em; text-align: center; }
+  th { background: #f0f0f0; }
+  .rule { color: darkgreen; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>BaZi Calculator (Hour-Level)</h1>
+<p>Reference date: 2026-01-07 18:00</p>
+
+<table id="bazi-table">
+  <thead>
+    <tr>
+      <th>Date & Hour</th>
+      <th>Year</th>
+      <th>Month</th>
+      <th>Day</th>
+      <th>Hour</th>
+      <th>Hidden Stems</th>
+      <th>Rules Triggered</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+// ================ Constants =================
+const TIAN_GAN = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];
+const DI_ZHI  = ["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"];
+
+const SAN_HE = [
+  { set:["申","子","辰"], element:"水" },
+  { set:["亥","卯","未"], element:"木" },
+  { set:["寅","午","戌"], element:"火" },
+  { set:["巳","酉","丑"], element:"金" }
+];
+const SAN_HUI = [
+  { set:["寅","卯","辰"], element:"木" },
+  { set:["巳","午","未"], element:"火" },
+  { set:["申","酉","戌"], element:"金" },
+  { set:["亥","子","丑"], element:"水" }
+];
+const TIAN_GAN_HE = { "甲己":"土","乙庚":"金","丙辛":"水","丁壬":"木","戊癸":"火" };
+const HIDDEN_STEMS = {
+  子:["癸"], 丑:["己","癸","辛"], 寅:["甲","丙","戊"], 卯:["乙"],
+  辰:["戊","乙","癸"], 巳:["丙","戊","庚"], 午:["丁","己"], 未:["己","丁","乙"],
+  申:["庚","壬","戊"], 酉:["辛"], 戌:["戊","辛","丁"], 亥:["壬","甲"]
+};
+
+// Reference date
+const REF_DATE = new Date("2026-01-07T18:00:00");
+const REF_BAZI = {
+  year:  { gan:"乙", zhi:"巳" },
+  month: { gan:"己", zhi:"丑" },
+  day:   { gan:"辛", zhi:"巳" },
+  hour:  { gan:"丁", zhi:"酉" }
+};
+
+// ================ Helpers =================
+function addGanzhi(base, offset){
+  const ganIndex = (TIAN_GAN.indexOf(base.gan)+offset)%10;
+  const zhiIndex = (DI_ZHI.indexOf(base.zhi)+offset)%12;
+  return { gan: TIAN_GAN[(ganIndex+10)%10], zhi: DI_ZHI[(zhiIndex+12)%12] };
+}
+
+function getBazi(date){
+  const diffDays = Math.floor((date - REF_DATE)/86400000);
+  const diffHours = Math.floor((date - REF_DATE)/3600000);
+  return {
+    year: REF_BAZI.year,
+    month: REF_BAZI.month,
+    day: addGanzhi(REF_BAZI.day,diffDays),
+    hour: addGanzhi(REF_BAZI.hour,diffHours)
+  };
+}
+
+function checkSanRules(zhiList){
+  const hits = [];
+  for(const rule of [...SAN_HE,...SAN_HUI]){
+    if(rule.set.every(z=>zhiList.includes(z))){
+      hits.push((SAN_HE.includes(rule)?"三合":"三會")+"→"+rule.element);
+    }
+  }
+  return hits;
+}
+
+function checkTianGanHe(stems){
+  const pairs = [[0,1,"Year–Month"],[1,2,"Month–Day"],[2,3,"Day–Hour"]];
+  const hits = [];
+  for(const [i,j,label] of pairs){
+    const key1=stems[i]+stems[j], key2=stems[j]+stems[i];
+    const element = TIAN_GAN_HE[key1]||TIAN_GAN_HE[key2];
+    if(element) hits.push("天干五合("+label+")→"+element);
+  }
+  return hits;
+}
+
+// ================ Table Renderer =================
+const tbody = document.querySelector("#bazi-table tbody");
+function renderRow(date,bazi){
+  const hourStart = date.getHours().toString().padStart(2,"0");
+  const hourEnd = ((date.getHours()+2)%24).toString().padStart(2,"0");
+  const hiddenStr = [
+    HIDDEN_STEMS[bazi.year.zhi].join(","),
+    HIDDEN_STEMS[bazi.month.zhi].join(","),
+    HIDDEN_STEMS[bazi.day.zhi].join(","),
+    HIDDEN_STEMS[bazi.hour.zhi].join(",")
+  ].join(" | ");
+  const zhiList = [bazi.year.zhi,bazi.month.zhi,bazi.day.zhi,bazi.hour.zhi];
+  const ganList = [bazi.year.gan,bazi.month.gan,bazi.day.gan,bazi.hour.gan];
+  const rules = [...checkSanRules(zhiList), ...checkTianGanHe(ganList)].join("; ") || "-";
+  
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${date.toISOString().slice(0,10)} ${hourStart}:00–${hourEnd}:59</td>
+    <td>${bazi.year.gan}${bazi.year.zhi}</td>
+    <td>${bazi.month.gan}${bazi.month.zhi}</td>
+    <td>${bazi.day.gan}${bazi.day.zhi}</td>
+    <td>${bazi.hour.gan}${bazi.hour.zhi}</td>
+    <td>${hiddenStr}</td>
+    <td class="rule">${rules}</td>
+  `;
+  tbody.appendChild(tr);
+}
+
+// ================ Main =================
+let results=[], offsetDays=0;
+while(results.length<10){
+  const baseDay = new Date(REF_DATE); baseDay.setDate(baseDay.getDate()+offsetDays);
+  for(let hour=0; hour<24; hour+=2){
+    const dt = new Date(baseDay); dt.setHours(hour,0,0,0);
+    const bazi = getBazi(dt);
+    const zhiList=[bazi.year.zhi,bazi.month.zhi,bazi.day.zhi,bazi.hour.zhi];
+    const ganList=[bazi.year.gan,bazi.month.gan,bazi.day.gan,bazi.hour.gan];
+    const sanHits=checkSanRules(zhiList), ganHits=checkTianGanHe(ganList);
+    if(sanHits.length || ganHits.length){
+      renderRow(dt,bazi);
+      results.push({date:dt,bazi});
+      if(results.length>=10) break;
+    }
+  }
+  offsetDays++;
+}
+
+</script>
+</body>
+</html>
+
