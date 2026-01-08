@@ -1,241 +1,168 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
 <meta charset="UTF-8" />
 <title>BaZi Scanner</title>
 <style>
-body { font-family: system-ui; padding: 20px; }
-table { border-collapse: collapse; width: 100%; margin-top: 16px; }
-th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
-th { background: #f0f0f0; }
-.caption { font-weight: 600; margin-top: 24px; }
+  body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; line-height: 1.5; color: #333; }
+  table { border-collapse: collapse; width: 100%; margin-top: 16px; font-size: 14px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+  th { background: #f8f8f8; }
+  .status { color: #666; font-style: italic; }
+  .highlight { background-color: #fff9c4; font-weight: bold; }
+  h2 { border-bottom: 2px solid #eee; padding-bottom: 8px; margin-top: 32px; }
 </style>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5257417766163073"
-     crossorigin="anonymous"></script>
 </head>
 <body>
 
 <h2>About This Tool</h2>
 <p>
-This site calculates BaZi (Four Pillars of Destiny) using traditional
-Heavenly Stem and Earthly Branch rules, including San He, San Hui,
-and Heavenly Stem combinations.
+This tool calculates BaZi (Four Pillars of Destiny) using accurate solar term transitions and traditional logic (Five Tigers/Rats formulas).
 </p>
 
 <h2>Current Date & Time</h2>
-<div id="nowTime"></div>
+<div id="nowTime">Loading...</div>
 
 <h2>Current BaZi (4 Pillars)</h2>
-<table id="current"></table>
+<table id="current">
+  <thead>
+    <tr><th>Pillar</th><th>Value</th><th>Hidden Stems</th></tr>
+  </thead>
+  <tbody id="currentBody">
+    <tr><td colspan="3">Calculating current pillars...</td></tr>
+  </tbody>
+</table>
 
 <h2>Next 10 Days – Important Hours</h2>
-<table id="results"></table>
+<p id="scanStatus" class="status">Scanning for combinations...</p>
+<table id="results">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Hour</th>
+      <th>Pillars (Y-M-D-H)</th>
+      <th>Interaction (交互)</th>
+      <th>Element</th>
+      <th>Hidden Stems</th>
+    </tr>
+  </thead>
+  <tbody id="resultsBody"></tbody>
+</table>
+
+<script src="bazi.js"></script>
 
 <script>
 /* =========================
-   Fixed Reference Anchor
+   Configurations from bazi.js
 ========================= */
-const REF_DATE = new Date("2026-01-07T18:00:00");
-const REF_PILLARS = {
-  year: "乙巳",
-  month: "己丑",
-  day: "辛巳"
-};
+// These should match the ones in your bazi.js for consistency
+const STEM_COMBOS = { "甲己":"土","己甲":"土","乙庚":"金","庚乙":"金","丙辛":"水","辛丙":"水","丁壬":"木","壬丁":"木","戊癸":"火","癸戊":"火" };
+const SAN_HE = { "申子辰":"水","寅午戌":"火","亥卯未":"木","巳酉丑":"金" };
+const SAN_HUI = { "寅卯辰":"木","巳午未":"火","申酉戌":"金","亥子丑":"水" };
 
-/* =========================
-   Constants
-========================= */
-const stems = ["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"];
-const branches = ["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"];
+async function runScanner() {
+  const now = new Date();
+  document.getElementById("nowTime").innerText = now.toLocaleString();
+  
+  try {
+    // 1. Calculate Current BaZi
+    const currentResult = await calculateBazi(now);
+    const currentBody = document.getElementById("currentBody");
+    const pillarNames = ["Year", "Month", "Day", "Hour"];
+    
+    currentBody.innerHTML = "";
+    currentResult.pillars.forEach((p, i) => {
+      const row = `<tr>
+        <td><strong>${pillarNames[i]}</strong></td>
+        <td>${p}</td>
+        <td>${currentResult.hiddenStems[i]}</td>
+      </tr>`;
+      currentBody.innerHTML += row;
+    });
 
-const hiddenStems = {
-  子:["癸"], 丑:["己","癸","辛"], 寅:["甲","丙","戊"],
-  卯:["乙"], 辰:["戊","乙","癸"], 巳:["丙","戊","庚"],
-  午:["丁","己"], 未:["己","丁","乙"],
-  申:["庚","壬","戊"], 酉:["辛"],
-  戌:["戊","辛","丁"], 亥:["壬","甲"]
-};
+    // 2. Scan Next 10 Days
+    const resultsBody = document.getElementById("resultsBody");
+    const scanStatus = document.getElementById("scanStatus");
+    resultsBody.innerHTML = "";
 
-const stemCombos = {
-  "甲己":"土","乙庚":"金","丙辛":"水","丁壬":"木","戊癸":"火"
-};
+    for (let d = 0; d < 10; d++) {
+      const scanDate = new Date(now);
+      scanDate.setDate(now.getDate() + d);
 
-const sanHe = {
-  "申子辰":"水","寅午戌":"火","亥卯未":"木","巳酉丑":"金"
-};
+      for (let h = 0; h < 24; h += 2) {
+        const iterDate = new Date(scanDate);
+        iterDate.setHours(h, 0, 0, 0);
+        
+        // Skip hours in the past for today
+        if (iterDate <= now) continue;
 
-const sanHui = {
-  "寅卯辰":"木","巳午未":"火","申酉戌":"金","亥子丑":"水"
-};
+        const res = await calculateBazi(iterDate);
+        const [yP, mP, dP, hP] = res.pillars;
+        const stemsArr = res.pillars.map(p => p[0]);
+        const branchesStr = res.pillars.map(p => p[1]).join("");
 
-/* =========================
-   Utilities
-========================= */
-function daysBetween(a, b) {
-  return Math.floor((a - b) / 86400000);
-}
+        let hitFound = false;
+        let interaction = "";
+        let element = "";
 
-function cycle(base, offset, mod) {
-  return (base + offset % mod + mod) % mod;
-}
+        // Check Stem Combinations (Adjacent)
+        const adjPairs = [[0,1,"Year-Month"], [1,2,"Month-Day"], [2,3,"Day-Hour"]];
+        for (const [a, b, lab] of adjPairs) {
+          const pair = stemsArr[a] + stemsArr[b];
+          if (STEM_COMBOS[pair]) {
+            interaction = `Stem Combo (${lab})`;
+            element = STEM_COMBOS[pair];
+            hitFound = true;
+          }
+        }
 
-function dayPillar(date) {
-  const d = daysBetween(date, REF_DATE);
-  return (
-    stems[cycle(stems.indexOf(REF_PILLARS.day[0]), d, 10)] +
-    branches[cycle(branches.indexOf(REF_PILLARS.day[1]), d, 12)]
-  );
-}
+        // Check San He / San Hui
+        for (const key in SAN_HE) {
+          if ([...key].every(b => branchesStr.includes(b))) {
+            interaction = "San He (三合)";
+            element = SAN_HE[key];
+            hitFound = true;
+          }
+        }
+        for (const key in SAN_HUI) {
+          if ([...key].every(b => branchesStr.includes(b))) {
+            interaction = "San Hui (三會)";
+            element = SAN_HUI[key];
+            hitFound = true;
+          }
+        }
 
-function monthPillar(date) {
-  const m = (date.getFullYear() - REF_DATE.getFullYear()) * 12 +
-            (date.getMonth() - REF_DATE.getMonth());
-  return (
-    stems[cycle(stems.indexOf(REF_PILLARS.month[0]), m, 10)] +
-    branches[cycle(branches.indexOf(REF_PILLARS.month[1]), m, 12)]
-  );
-}
-
-function yearPillar(date) {
-  const y = date.getFullYear() - REF_DATE.getFullYear();
-  return (
-    stems[cycle(stems.indexOf(REF_PILLARS.year[0]), y, 10)] +
-    branches[cycle(branches.indexOf(REF_PILLARS.year[1]), y, 12)]
-  );
-}
-
-function hourPillar(dayStem, hourIndex) {
-  const stemIndex = (stems.indexOf(dayStem) * 2 + hourIndex) % 10;
-  return stems[stemIndex] + branches[hourIndex];
-}
-
-/* =========================
-   Current Time & BaZi
-========================= */
-const now = new Date();
-document.getElementById("nowTime").innerText = now.toString();
-
-const curYear = yearPillar(now);
-const curMonth = monthPillar(now);
-const curDay = dayPillar(now);
-const curHour = hourPillar(curDay[0], Math.floor(now.getHours() / 2));
-
-const currentTable = document.getElementById("current");
-currentTable.innerHTML = `
-<tr><th>Pillar</th><th>Value</th><th>Hidden Stems</th></tr>
-<tr><td>Year</td><td>${curYear}</td><td>${hiddenStems[curYear[1]].join(",")}</td></tr>
-<tr><td>Month</td><td>${curMonth}</td><td>${hiddenStems[curMonth[1]].join(",")}</td></tr>
-<tr><td>Day</td><td>${curDay}</td><td>${hiddenStems[curDay[1]].join(",")}</td></tr>
-<tr><td>Hour</td><td>${curHour}</td><td>${hiddenStems[curHour[1]].join(",")}</td></tr>
-`;
-
-/* =========================
-   Prediction Table Header
-========================= */
-const resultTable = document.getElementById("results");
-resultTable.innerHTML = `
-<tr>
-<th>Date</th>
-<th>Hour</th>
-<th>Year</th>
-<th>Month</th>
-<th>Day</th>
-<th>Hour Pillar</th>
-<th>Rule</th>
-<th>Element</th>
-<th>Hidden Stems</th>
-</tr>`;
-
-/* =========================
-   Scan Next 10 Days
-========================= */
-for (let d = 0; d < 10; d++) {
-  const date = new Date(now);
-  date.setDate(now.getDate() + d);
-
-  const yP = yearPillar(date);
-  const mP = monthPillar(date);
-  const dP = dayPillar(date);
-
-  for (let h = 0; h < 12; h++) {
-    const hourStart = new Date(date);
-    hourStart.setHours(h * 2, 0, 0, 0);
-    if (hourStart <= now) continue;
-
-    const hP = hourPillar(dP[0], h);
-
-    const stemsSeq = [yP[0], mP[0], dP[0], hP[0]];
-    const branchesSeq = [yP[1], mP[1], dP[1], hP[1]];
-
-    /* 天干五合 — adjacent only */
-    const adj = [
-      [0,1,"Year–Month"],
-      [1,2,"Month–Day"],
-      [2,3,"Day–Hour"]
-    ];
-
-    for (const [a,b,label] of adj) {
-      const key = stemsSeq[a] + stemsSeq[b];
-      if (stemCombos[key]) {
-        resultTable.innerHTML += `
-<tr>
-<td>${hourStart.toLocaleDateString()}</td>
-<td>${hourStart.getHours()}:00–${hourStart.getHours()+1}:59</td>
-<td>${yP}</td>
-<td>${mP}</td>
-<td>${dP}</td>
-<td>${hP}</td>
-<td>天干五合 (${label})</td>
-<td>${stemCombos[key]}</td>
-<td>
-${hiddenStems[branchesSeq[a]].join(",")}
- /
-${hiddenStems[branchesSeq[b]].join(",")}
-</td>
-</tr>`;
+        if (hitFound) {
+          const row = `<tr class="highlight">
+            <td>${iterDate.toLocaleDateString()}</td>
+            <td>${h}:00 - ${h+1}:59</td>
+            <td>${res.pillars.join("-")}</td>
+            <td>${interaction}</td>
+            <td>${element}</td>
+            <td>${res.hiddenStems.join(" | ")}</td>
+          </tr>`;
+          resultsBody.innerHTML += row;
+        }
       }
     }
-
-    /* 三合 / 三會 */
-    const bSet = branchesSeq.join("");
-    for (const k in sanHe) {
-      if ([...k].every(x => bSet.includes(x))) {
-        resultTable.innerHTML += `
-<tr>
-<td>${hourStart.toLocaleDateString()}</td>
-<td>${hourStart.getHours()}:00–${hourStart.getHours()+1}:59</td>
-<td>${yP}</td>
-<td>${mP}</td>
-<td>${dP}</td>
-<td>${hP}</td>
-<td>三合</td>
-<td>${sanHe[k]}</td>
-<td>${k.split("").map(b=>hiddenStems[b].join(",")).join(" | ")}</td>
-</tr>`;
-      }
+    
+    scanStatus.innerText = "Scan complete. Highlighting auspicious/significant hours.";
+    if (resultsBody.innerHTML === "") {
+      resultsBody.innerHTML = "<tr><td colspan='6'>No major interactions found in the next 10 days.</td></tr>";
     }
 
-    for (const k in sanHui) {
-      if ([...k].every(x => bSet.includes(x))) {
-        resultTable.innerHTML += `
-<tr>
-<td>${hourStart.toLocaleDateString()}</td>
-<td>${hourStart.getHours()}:00–${hourStart.getHours()+1}:59</td>
-<td>${yP}</td>
-<td>${mP}</td>
-<td>${dP}</td>
-<td>${hP}</td>
-<td>三會</td>
-<td>${sanHui[k]}</td>
-<td>${k.split("").map(b=>hiddenStems[b].join(",")).join(" | ")}</td>
-</tr>`;
-      }
-    }
+  } catch (err) {
+    console.error(err);
+    document.getElementById("scanStatus").innerText = "Error: " + err.message;
   }
 }
+
+// Start the scanner
+runScanner();
 </script>
-</body>
-<footer style="margin-top:40px">
+
+<footer style="margin-top:40px; border-top: 1px solid #eee; padding-top: 20px;">
   <a href="privacy.html">Privacy Policy</a>
 </footer>
+</body>
 </html>

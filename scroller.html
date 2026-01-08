@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>BaZi Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; background: #fafafa; color: #333; }
+    h1 { margin-bottom: 10px; }
+    .picker { margin-bottom: 20px; }
+    .label { font-weight: 600; display: block; margin-bottom: 5px; }
+    table { border-collapse: collapse; width: 100%; max-width: 600px; background: white; }
+    th, td { border: 1px solid #ccc; padding: 12px 8px; text-align: center; }
+    th { background: #eee; }
+    .analysis { margin-top: 20px; max-width: 600px; padding: 15px; background: #fff; border: 1px solid #ddd; border-radius: 4px; }
+    .analysis div { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<h1>BaZi Calculator</h1>
+
+<div class="picker">
+  <label class="label" for="datetime">Select date & time (Local/EST):</label>
+  <input id="datetime" type="datetime-local" />
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Pillar</th>
+      <th>Stem</th>
+      <th>Branch</th>
+      <th>Hidden Stems</th>
+    </tr>
+  </thead>
+  <tbody id="baziTable">
+    </tbody>
+</table>
+
+<div class="analysis">
+  <div><span class="label">天干五合 (Stem Combinations):</span> <span id="stemHits">–</span></div>
+  <div><span class="label">地支關係 (Branch Interactions):</span> <span id="sanHits">–</span></div>
+</div>
+
+<script src="bazi.js"></script>
+
+<script>
+/***********************
+ * UI LOGIC
+ ***********************/
+const datetimeInput = document.getElementById("datetime");
+const baziTable = document.getElementById("baziTable");
+const stemHitsEl = document.getElementById("stemHits");
+const sanHitsEl = document.getElementById("sanHits");
+
+// Initialize with current time (formatted for datetime-local)
+const now = new Date();
+now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+datetimeInput.value = now.toISOString().slice(0, 16);
+
+async function update() {
+  try {
+    const val = datetimeInput.value;
+    if (!val) return;
+
+    const date = new Date(val);
+
+    // 1. Call your calculateBazi function from bazi.js
+    // This function must be 'async' as it fetches JSON
+    const result = await calculateBazi(date);
+
+    if (!result || !result.pillars) {
+      console.error("Calculation returned no data");
+      return;
+    }
+
+    // 2. Clear and build the table
+    baziTable.innerHTML = "";
+    const pillarNames = ["Year (年)", "Month (月)", "Day (日)", "Hour (時)"];
+
+    result.pillars.forEach((p, i) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td><strong>${pillarNames[i]}</strong></td>
+        <td>${p[0]}</td>
+        <td>${p[1]}</td>
+        <td>${result.hiddenStems[i] || "–"}</td>
+      `;
+      baziTable.appendChild(row);
+    });
+
+    // 3. Update Analysis (if analyze function exists in bazi.js)
+    if (result.analysis) {
+      stemHitsEl.innerText = result.analysis.stemHits.length > 0 ? result.analysis.stemHits.join(", ") : "None";
+      sanHitsEl.innerText = result.analysis.sanHits.length > 0 ? result.analysis.sanHits.join(", ") : "None";
+    } else {
+      stemHitsEl.innerText = "–";
+      sanHitsEl.innerText = "–";
+    }
+
+  } catch (error) {
+    console.error("Error during update:", error.message);
+    baziTable.innerHTML = `<tr><td colspan="4" style="color:red">Error: ${error.message}. Ensure JSON files exist in root.</td></tr>`;
+  }
+}
+
+// Event Listeners
+datetimeInput.addEventListener("change", update);
+// Initial run
+update();
+</script>
+
+</body>
+</html>
