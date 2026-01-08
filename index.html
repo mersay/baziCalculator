@@ -5,14 +5,18 @@
 <title>BaZi Scanner</title>
 <style>
 body { font-family: system-ui; padding: 20px; }
-table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+table { border-collapse: collapse; width: 100%; margin-top: 16px; }
 th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
 th { background: #f0f0f0; }
+.caption { font-weight: 600; margin-top: 24px; }
 </style>
 </head>
 <body>
 
-<h2>Current BaZi</h2>
+<h2>Current Date & Time</h2>
+<div id="nowTime"></div>
+
+<h2>Current BaZi (4 Pillars)</h2>
 <table id="current"></table>
 
 <h2>Next 10 Days – Important Hours</h2>
@@ -20,14 +24,13 @@ th { background: #f0f0f0; }
 
 <script>
 /* =========================
-   Reference (FIXED)
+   Fixed Reference Anchor
 ========================= */
 const REF_DATE = new Date("2026-01-07T18:00:00");
 const REF_PILLARS = {
   year: "乙巳",
   month: "己丑",
-  day: "辛巳",
-  hour: "丁酉"
+  day: "辛巳"
 };
 
 /* =========================
@@ -59,10 +62,37 @@ const sanHui = {
 /* =========================
    Utilities
 ========================= */
-function pillarAt(offset) {
-  const stem = stems[(stems.indexOf("辛") + offset) % 10];
-  const branch = branches[(branches.indexOf("巳") + offset) % 12];
-  return stem + branch;
+function daysBetween(a, b) {
+  return Math.floor((a - b) / 86400000);
+}
+
+function cycle(base, offset, mod) {
+  return (base + offset % mod + mod) % mod;
+}
+
+function dayPillar(date) {
+  const d = daysBetween(date, REF_DATE);
+  return (
+    stems[cycle(stems.indexOf(REF_PILLARS.day[0]), d, 10)] +
+    branches[cycle(branches.indexOf(REF_PILLARS.day[1]), d, 12)]
+  );
+}
+
+function monthPillar(date) {
+  const m = (date.getFullYear() - REF_DATE.getFullYear()) * 12 +
+            (date.getMonth() - REF_DATE.getMonth());
+  return (
+    stems[cycle(stems.indexOf(REF_PILLARS.month[0]), m, 10)] +
+    branches[cycle(branches.indexOf(REF_PILLARS.month[1]), m, 12)]
+  );
+}
+
+function yearPillar(date) {
+  const y = date.getFullYear() - REF_DATE.getFullYear();
+  return (
+    stems[cycle(stems.indexOf(REF_PILLARS.year[0]), y, 10)] +
+    branches[cycle(branches.indexOf(REF_PILLARS.year[1]), y, 12)]
+  );
 }
 
 function hourPillar(dayStem, hourIndex) {
@@ -71,74 +101,88 @@ function hourPillar(dayStem, hourIndex) {
 }
 
 /* =========================
-   Display Current BaZi
+   Current Time & BaZi
 ========================= */
+const now = new Date();
+document.getElementById("nowTime").innerText = now.toString();
+
+const curYear = yearPillar(now);
+const curMonth = monthPillar(now);
+const curDay = dayPillar(now);
+const curHour = hourPillar(curDay[0], Math.floor(now.getHours() / 2));
+
 const currentTable = document.getElementById("current");
 currentTable.innerHTML = `
 <tr><th>Pillar</th><th>Value</th><th>Hidden Stems</th></tr>
-${Object.entries(REF_PILLARS).map(([k,v]) =>
-  `<tr><td>${k}</td><td>${v}</td><td>${hiddenStems[v[1]].join(",")}</td></tr>`
-).join("")}
+<tr><td>Year</td><td>${curYear}</td><td>${hiddenStems[curYear[1]].join(",")}</td></tr>
+<tr><td>Month</td><td>${curMonth}</td><td>${hiddenStems[curMonth[1]].join(",")}</td></tr>
+<tr><td>Day</td><td>${curDay}</td><td>${hiddenStems[curDay[1]].join(",")}</td></tr>
+<tr><td>Hour</td><td>${curHour}</td><td>${hiddenStems[curHour[1]].join(",")}</td></tr>
 `;
+
+/* =========================
+   Prediction Table Header
+========================= */
+const resultTable = document.getElementById("results");
+resultTable.innerHTML = `
+<tr>
+<th>Date</th>
+<th>Hour</th>
+<th>Year</th>
+<th>Month</th>
+<th>Day</th>
+<th>Hour Pillar</th>
+<th>Rule</th>
+<th>Element</th>
+<th>Hidden Stems</th>
+</tr>`;
 
 /* =========================
    Scan Next 10 Days
 ========================= */
-const now = new Date();
-const resultTable = document.getElementById("results");
-resultTable.innerHTML = `
-<tr>
-<th>Date</th><th>Hour</th><th>Rule</th>
-<th>Element</th><th>Pillars</th><th>Hidden Stems</th>
-</tr>`;
+for (let d = 0; d < 10; d++) {
+  const date = new Date(now);
+  date.setDate(now.getDate() + d);
 
-for (let d=0; d<10; d++) {
-  const date = new Date(REF_DATE);
-  date.setDate(date.getDate() + d);
+  const yP = yearPillar(date);
+  const mP = monthPillar(date);
+  const dP = dayPillar(date);
 
-  const dayPillar = pillarAt(d);
-  const dayStem = dayPillar[0];
-
-  for (let h=0; h<12; h++) {
+  for (let h = 0; h < 12; h++) {
     const hourStart = new Date(date);
-    hourStart.setHours(h*2,0,0,0);
-
+    hourStart.setHours(h * 2, 0, 0, 0);
     if (hourStart <= now) continue;
 
-    const hourP = hourPillar(dayStem, h);
+    const hP = hourPillar(dP[0], h);
 
-    const stemsSeq = [
-      REF_PILLARS.year[0],
-      REF_PILLARS.month[0],
-      dayPillar[0],
-      hourP[0]
-    ];
+    const stemsSeq = [yP[0], mP[0], dP[0], hP[0]];
+    const branchesSeq = [yP[1], mP[1], dP[1], hP[1]];
 
-    const branchesSeq = [
-      REF_PILLARS.year[1],
-      REF_PILLARS.month[1],
-      dayPillar[1],
-      hourP[1]
-    ];
-
-    /* 天干五合 (adjacent only) */
-    const stemPairs = [
+    /* 天干五合 — adjacent only */
+    const adj = [
       [0,1,"Year–Month"],
       [1,2,"Month–Day"],
       [2,3,"Day–Hour"]
     ];
 
-    for (const [a,b,label] of stemPairs) {
+    for (const [a,b,label] of adj) {
       const key = stemsSeq[a] + stemsSeq[b];
       if (stemCombos[key]) {
         resultTable.innerHTML += `
 <tr>
-<td>${date.toISOString().slice(0,10)}</td>
+<td>${hourStart.toLocaleDateString()}</td>
 <td>${hourStart.getHours()}:00–${hourStart.getHours()+1}:59</td>
+<td>${yP}</td>
+<td>${mP}</td>
+<td>${dP}</td>
+<td>${hP}</td>
 <td>天干五合 (${label})</td>
 <td>${stemCombos[key]}</td>
-<td>${stemsSeq[a]}${branchesSeq[a]} + ${stemsSeq[b]}${branchesSeq[b]}</td>
-<td>${hiddenStems[branchesSeq[a]].join(",")} / ${hiddenStems[branchesSeq[b]].join(",")}</td>
+<td>
+${hiddenStems[branchesSeq[a]].join(",")}
+ /
+${hiddenStems[branchesSeq[b]].join(",")}
+</td>
 </tr>`;
       }
     }
@@ -149,11 +193,14 @@ for (let d=0; d<10; d++) {
       if ([...k].every(x => bSet.includes(x))) {
         resultTable.innerHTML += `
 <tr>
-<td>${date.toISOString().slice(0,10)}</td>
+<td>${hourStart.toLocaleDateString()}</td>
 <td>${hourStart.getHours()}:00–${hourStart.getHours()+1}:59</td>
+<td>${yP}</td>
+<td>${mP}</td>
+<td>${dP}</td>
+<td>${hP}</td>
 <td>三合</td>
 <td>${sanHe[k]}</td>
-<td>${k}</td>
 <td>${k.split("").map(b=>hiddenStems[b].join(",")).join(" | ")}</td>
 </tr>`;
       }
@@ -163,11 +210,14 @@ for (let d=0; d<10; d++) {
       if ([...k].every(x => bSet.includes(x))) {
         resultTable.innerHTML += `
 <tr>
-<td>${date.toISOString().slice(0,10)}</td>
+<td>${hourStart.toLocaleDateString()}</td>
 <td>${hourStart.getHours()}:00–${hourStart.getHours()+1}:59</td>
+<td>${yP}</td>
+<td>${mP}</td>
+<td>${dP}</td>
+<td>${hP}</td>
 <td>三會</td>
 <td>${sanHui[k]}</td>
-<td>${k}</td>
 <td>${k.split("").map(b=>hiddenStems[b].join(",")).join(" | ")}</td>
 </tr>`;
       }
