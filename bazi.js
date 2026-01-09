@@ -88,8 +88,18 @@ function getMonthPillar(yearPillar, termName) {
   return stem + branch;
 }
 
+
+/***********************
+ * PILLAR CALCULATIONS
+ ***********************/
+
+/**
+ * Calculates the Day Pillar.
+ * Shifts to the next day's pillar at 23:00 (Start of Zi Hour).
+ */
 function getDayPillar(date) {
   const d = new Date(date);
+  // BaZi day starts at 23:00
   if (d.getHours() >= 23) d.setDate(d.getDate() + 1);
   
   const diffDays = Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - 
@@ -100,29 +110,39 @@ function getDayPillar(date) {
   return stem + branch;
 }
 
-function getHourPillar(date, dayStem) {
-  const hour = date.getHours();
+function getHourPillar(date, dayPillar) {
+  const hour = date.getHours(); 
+  const dayStem = dayPillar[0]; // This is already the shifted stem if hour >= 23
   let branch = "";
+
+  // 1. Find the Branch
   for (const [start, end, b] of HOUR_BRANCH_TABLE) {
-    if (start > end) { if (hour >= start || hour < end) branch = b; } 
-    else { if (hour >= start && hour < end) branch = b; }
+    if (start > end) { 
+      if (hour >= start || hour < end) branch = b; 
+    } else { 
+      if (hour >= start && hour < end) branch = b; 
+    }
   }
 
-  // "Five Rats" formula to find hour stem
-  const startMap = { "甲": "甲", "己": "甲", "乙": "丙", "庚": "丙", "丙": "戊", "辛": "戊", "丁": "庚", "壬": "庚", "戊": "壬", "癸": "壬" };
+  // 2. Five Rats Formula (Calculated using the CURRENT dayStem)
+  const startMap = { 
+    "甲": "甲", "己": "甲", "乙": "丙", "庚": "丙", 
+    "丙": "戊", "辛": "戊", "丁": "庚", "壬": "庚", 
+    "戊": "壬", "癸": "壬" 
+  };
+  
   const startStemIdx = HEAVENLY_STEMS.indexOf(startMap[dayStem]);
   const branchIdx = EARTHLY_BRANCHES.indexOf(branch);
   const stem = HEAVENLY_STEMS[mod(startStemIdx + branchIdx, 10)];
-  
+  console.log("Stem", stem)
   return stem + branch;
 }
 
-/***********************
- * MAIN FUNCTION
- ***********************/
+/**
+ * Main wrapper to calculate all 4 pillars.
+ */
 async function calculateBazi(date) {
   const year = date.getFullYear();
-  // Fetch current and previous year to handle year-start transitions
   const promises = [year - 1, year].map(y => fetch(`${y}.json`).then(r => r.json()).catch(() => []));
   const allDays = (await Promise.all(promises)).flat();
 
@@ -138,11 +158,15 @@ async function calculateBazi(date) {
   
   const yearPillar = getYearPillar(allDays, index);
   const monthPillar = getMonthPillar(yearPillar, termInfo.name);
-  const dayPillar = getDayPillar(date);
-  const hourPillar = getHourPillar(date, dayPillar[0]);
+  
+  // getDayPillar returns the pillar for the Bazi day (shifts at 23:00)
+  const dayPillar = getDayPillar(date); 
+  
+  // getHourPillar now internally handles the stem correction for 23:00
+  const hourPillar = getHourPillar(date, dayPillar);
 
   const pillars = [yearPillar, monthPillar, dayPillar, hourPillar];
-  console.log(pillars);
+  
   return {
     isoDate: date.toISOString(),
     pillars: pillars,

@@ -65,98 +65,87 @@ async function runScanner() {
   document.getElementById("nowTime").innerText = now.toLocaleString();
   
   try {
-    // 1. Calculate Current BaZi
     const currentResult = await calculateBazi(now);
     const currentBody = document.getElementById("currentBody");
     const pillarNames = ["Year", "Month", "Day", "Hour"];
     
     currentBody.innerHTML = "";
     currentResult.pillars.forEach((p, i) => {
-      const row = `<tr>
-        <td><strong>${pillarNames[i]}</strong></td>
-        <td>${p}</td>
-        <td>${currentResult.hiddenStems[i]}</td>
-      </tr>`;
+      const row = `<tr><td><strong>${pillarNames[i]}</strong></td><td>${p}</td><td>${currentResult.hiddenStems[i]}</td></tr>`;
       currentBody.innerHTML += row;
     });
 
-    // 2. Scan Next 10 Days
     const resultsBody = document.getElementById("resultsBody");
-    const scanStatus = document.getElementById("scanStatus");
     resultsBody.innerHTML = "";
 
     for (let d = 0; d < 10; d++) {
       const scanDate = new Date(now);
       scanDate.setDate(now.getDate() + d);
 
-      for (let h = 0; h < 24; h += 2) {
+      for (let h = -1; h < 23; h += 2) {
         const iterDate = new Date(scanDate);
         iterDate.setHours(h, 0, 0, 0);
         
-        // Skip hours in the past for today
         if (iterDate <= now) continue;
 
         const res = await calculateBazi(iterDate);
-        const [yP, mP, dP, hP] = res.pillars;
         const stemsArr = res.pillars.map(p => p[0]);
         const branchesStr = res.pillars.map(p => p[1]).join("");
 
-        let hitFound = false;
-        let interaction = "";
-        let element = "";
+        // 1. Initialize arrays to collect multiple interactions
+        let interactions = [];
+        let elements = [];
 
-        // Check Stem Combinations (Adjacent)
-        const adjPairs = [[0,1,"Year-Month"], [1,2,"Month-Day"], [2,3,"Day-Hour"]];
+        // 2. Check Stem Combinations (Adjacent)
+        const adjPairs = [[0,1,"Y-M"], [1,2,"M-D"], [2,3,"D-H"]];
         for (const [a, b, lab] of adjPairs) {
           const pair = stemsArr[a] + stemsArr[b];
           if (STEM_COMBOS[pair]) {
-            interaction = `Stem Combo (${lab})`;
-            element = STEM_COMBOS[pair];
-            hitFound = true;
+            interactions.push(`Stem Combo (${lab})`);
+            elements.push(STEM_COMBOS[pair]);
           }
         }
 
-        // Check San He / San Hui
+        // 3. Check San He
         for (const key in SAN_HE) {
           if ([...key].every(b => branchesStr.includes(b))) {
-            interaction = "San He (三合)";
-            element = SAN_HE[key];
-            hitFound = true;
-          }
-        }
-        for (const key in SAN_HUI) {
-          if ([...key].every(b => branchesStr.includes(b))) {
-            interaction = "San Hui (三會)";
-            element = SAN_HUI[key];
-            hitFound = true;
+            interactions.push("San He (三合)");
+            elements.push(SAN_HE[key]);
           }
         }
 
-        if (hitFound) {
+        // 4. Check San Hui
+        for (const key in SAN_HUI) {
+          if ([...key].every(b => branchesStr.includes(b))) {
+            interactions.push("San Hui (三會)");
+            elements.push(SAN_HUI[key]);
+          }
+        }
+
+        // 5. If any interaction was found, define displayH and add the row
+        if (interactions.length > 0) {
+          const startH = (h + 24) % 24;
+          const endH = (h + 2) % 24;
+          const displayH = `${startH.toString().padStart(2, '0')}:00 - ${endH.toString().padStart(2, '0')}:00`;
+
           const row = `<tr class="highlight">
             <td>${iterDate.toLocaleDateString()}</td>
-            <td>${h}:00 - ${h+1}:59</td>
+            <td>${displayH}</td>
             <td>${res.pillars.join("-")}</td>
-            <td>${interaction}</td>
-            <td>${element}</td>
+            <td>${interactions.join("<br>")}</td>
+            <td>${elements.join(", ")}</td>
             <td>${res.hiddenStems.join(" | ")}</td>
           </tr>`;
           resultsBody.innerHTML += row;
         }
       }
     }
-    
-    scanStatus.innerText = "Scan complete. Highlighting auspicious/significant hours.";
-    if (resultsBody.innerHTML === "") {
-      resultsBody.innerHTML = "<tr><td colspan='6'>No major interactions found in the next 10 days.</td></tr>";
-    }
-
+    document.getElementById("scanStatus").innerText = "Scan complete.";
   } catch (err) {
     console.error(err);
     document.getElementById("scanStatus").innerText = "Error: " + err.message;
   }
 }
-
 // Start the scanner
 runScanner();
 </script>
